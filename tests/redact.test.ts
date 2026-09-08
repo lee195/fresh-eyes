@@ -3,7 +3,7 @@ import { passesLuhn, redactSensitive } from '@/shared/redact'
 
 describe('redactSensitive', () => {
   it('removes email addresses but keeps the surrounding sentence', () => {
-    expect(redactSensitive('Signed in as jisu.lee@seibert.group — not you?')).toBe(
+    expect(redactSensitive('Signed in as sam@example.com — not you?')).toBe(
       'Signed in as [email] — not you?',
     )
   })

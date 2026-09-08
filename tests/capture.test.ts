@@ -61,11 +61,11 @@ describe('buildCapture', () => {
     `
     const email = document.getElementById('e') as HTMLInputElement
     const password = document.getElementById('p') as HTMLInputElement
-    email.value = 'jisu.lee@seibert.group'
+    email.value = 'sam@example.com'
     password.value = 'hunter2-correct-horse'
 
     const serialised = JSON.stringify(buildCapture())
-    expect(serialised).not.toContain('jisu.lee@seibert.group')
+    expect(serialised).not.toContain('sam@example.com')
     expect(serialised).not.toContain('hunter2')
     expect(serialised).toContain('Email') // the label still comes through
   })
