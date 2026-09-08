@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Fresh Eyes",
+  "version": "0.1.0",
+  "description": "See your app the way a non-technical user would — their reactions, and where they give up.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "fresh-eyes@local.dev",
+      "strict_min_version": "121.0"
+    }
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "Fresh Eyes",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "sidebar_action": {
+    "default_title": "Fresh Eyes",
+    "default_panel": "sidepanel/index.html",
+    "default_icon": {
+      "32": "icons/icon32.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  }
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Provision Workspace — Acme</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        color: #222;
+        background: #fff;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 40px 24px 120px; }
+      h1 { font-size: 26px; margin: 0 0 6px; }
+      .sub { color: #8a8a8a; margin: 0 0 28px; }
+      input {
+        width: 100%;
+        padding: 10px;
+        margin: 0 0 14px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      /* Styled like a button, reachable by neither keyboard nor screen reader. */
+      .cta {
+        display: inline-block;
+        background: #2b2b2b;
+        color: #fff;
+        padding: 11px 22px;
+        border-radius: 4px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .legal { font-size: 10px; color: #c9c9c9; line-height: 1.4; margin-top: 18px; }
+      .err {
+        background: #fff4f4;
+        border: 1px solid #f0caca;
+        color: #a33;
+        padding: 10px 12px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        font-size: 13px;
+      }
+      .prose { color: #444; line-height: 1.6; }
+      .divider { height: 1px; background: #eee; margin: 32px 0; }
+      .fieldrow { display: flex; gap: 12px; }
+      .fieldrow input { flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Provision your workspace instance</h1>
+      <p class="sub">Configure the tenant parameters below to initialize provisioning.</p>
+
+      <div class="err">Error: validation failed (code 422). Check your input and retry.</div>
+
+      <p class="prose">
+        Acme is a multi-tenant orchestration substrate for distributed workloads.
+        Each workspace is bound to an isolated namespace with its own quota
+        envelope, and provisioning a new instance allocates a dedicated control
+        plane shard alongside the workspace's object store. Tenancy parameters
+        cannot be modified post-provisioning without a migration window, so
+        review the configuration carefully before initializing. Quota adjustments
+        propagate asynchronously and may take up to one billing cycle to reflect
+        in the usage ledger. Consult the operator handbook for the full parameter
+        reference and the deprecation schedule for legacy tenancy modes.
+      </p>
+
+      <div class="divider"></div>
+
+      <input type="email" placeholder="Email" />
+      <input type="password" placeholder="Password" />
+      <input type="text" placeholder="Workspace slug" />
+
+      <div class="fieldrow">
+        <input type="text" placeholder="Card number" />
+        <input type="text" placeholder="MM/YY" />
+        <input type="text" placeholder="CVC" />
+      </div>
+
+      <div class="cta">Initialize</div>
+
+      <p class="legal">
+        By initializing you agree to the Master Subscription Agreement, the Data
+        Processing Addendum and the Acceptable Use Policy, and you authorize
+        recurring charges to the payment instrument provided above at the
+        then-current list rate for your selected tenancy tier, billed in arrears,
+        subject to the overage schedule published in the operator handbook.
+      </p>
+    </div>
+  </body>
+</html>
