@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/shared/browser'
 import { sendToBackground, type BackgroundEvent, type PanelContext } from '@/shared/messages'
+import { matchPatternFor, SETTINGS_KEY } from '@/shared/settings'
 import { DEFAULT_PERSONAS } from '@/shared/personas/defaults'
 import { TERMINAL_ACTIONS, type Reaction, type Session } from '@/shared/types'
 import {
@@ -53,7 +54,16 @@ function isTerminal(reaction: Reaction): boolean {
 }
 
 async function refresh() {
-  const res = await sendToBackground({ type: 'GET_CONTEXT' })
+  // activeTab is granted when the toolbar button is pressed and lost again on
+  // navigation, so a refresh can come back with no URL for the very tab we could
+  // read a moment ago. Hand the last address back rather than let the panel fall
+  // into "can't read this tab" with no way out; the background still re-checks it
+  // against the current allowlist, so adding the origin in Settings still lands.
+  const known = context.value
+  const lastKnown =
+    known?.tabId != null && known.origin ? { tabId: known.tabId, origin: known.origin } : undefined
+
+  const res = await sendToBackground({ type: 'GET_CONTEXT', lastKnown })
   if (res.type === 'CONTEXT') context.value = res.context
 }
 
@@ -72,20 +82,46 @@ async function run() {
   else if (res.type === 'ERROR') error.value = res.message
 }
 
+const needsPermissionFor = computed(() => {
+  const match = error.value?.match(/NEEDS_PERMISSION:(\S+)/)
+  return match?.[1] ?? null
+})
+
+/**
+ * Asks for a lasting permission for one origin.
+ *
+ * Called straight from the panel rather than through the service worker:
+ * Chrome only honours permissions.request() inside a user gesture, and a
+ * gesture does not survive a round trip through runtime.sendMessage.
+ */
+async function grantOrigin(origin: string): Promise<boolean> {
+  const match = matchPatternFor(origin)
+  if (!match) return false
+  try {
+    return await api.permissions.request({ origins: [match] })
+  } catch {
+    return false
+  }
+}
+
 async function grantEndpointAccess() {
-  const origin = error.value?.split('NEEDS_PERMISSION:')[1]
+  const origin = needsPermissionFor.value
   if (!origin) return
-  const res = await sendToBackground({ type: 'REQUEST_HOST_PERMISSION', origin })
-  if (res.type === 'PERMISSION' && res.granted) {
+  if (await grantOrigin(origin)) {
     error.value = null
     run()
   }
 }
 
-const needsPermissionFor = computed(() => {
-  const match = error.value?.match(/NEEDS_PERMISSION:(\S+)/)
-  return match?.[1] ?? null
-})
+/**
+ * Trades the one-shot activeTab grant for a lasting one on this site, so the
+ * address stays readable and a run still works after the page reloads.
+ */
+async function grantSiteAccess() {
+  const origin = context.value?.origin
+  if (!origin) return
+  if (await grantOrigin(origin)) await refresh()
+}
 
 function select(reaction: Reaction) {
   selected.value = selected.value === reaction.anchorId ? null : reaction.anchorId
@@ -110,13 +146,29 @@ function onBackgroundEvent(message: unknown) {
   }
 }
 
+/**
+ * Settings saved in the options page have to reach this panel on their own.
+ *
+ * The side panel document stays mounted across tab switches and while the
+ * options page sits in another tab, so without these listeners `context` keeps
+ * whatever it was built with when the panel first opened — which is how an
+ * origin added to the allowlist still reads as "not on the allowed list".
+ */
+function onStorageChanged(changes: Record<string, chrome.storage.StorageChange>, area: string) {
+  if (area === 'local' && changes[SETTINGS_KEY]) refresh()
+}
+
 onMounted(() => {
   refresh()
   api.runtime.onMessage.addListener(onBackgroundEvent)
+  api.storage.onChanged.addListener(onStorageChanged)
+  api.tabs.onActivated.addListener(refresh)
 })
 
 onUnmounted(() => {
   api.runtime.onMessage.removeListener(onBackgroundEvent)
+  api.storage.onChanged.removeListener(onStorageChanged)
+  api.tabs.onActivated.removeListener(refresh)
   sendToBackground({ type: 'CLEAR_PINS' })
 })
 </script>
@@ -151,12 +203,25 @@ onUnmounted(() => {
         <template v-if="!context?.backend">
           No model endpoint configured yet — open Settings.
         </template>
+        <template v-else-if="!context.origin">
+          Can't read this tab's address. Press the toolbar button on the page you want
+          analysed, or grant Fresh Eyes lasting access to it in Settings.
+        </template>
         <template v-else-if="!context.originAllowed">
           {{ context.origin }} is not on the allowed list.
+          <button class="linkish" @click="openOptions">Add it</button>
         </template>
         <template v-else>
           Sends this page and a screenshot to {{ context.backend.endpointHost }}.
         </template>
+      </p>
+
+      <p v-if="context?.origin && context.originAllowed && !context.hostPermission" class="dim note">
+        Access to this tab ends when it navigates.
+        <button class="linkish" @click="grantSiteAccess">
+          Keep access to {{ context.origin }}
+        </button>
+        so runs survive a reload.
       </p>
     </section>
 
