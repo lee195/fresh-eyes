@@ -31,7 +31,8 @@ unpacked). Then:
    `ollama serve` and keep the defaults (`http://localhost:11434/v1`, no key).
    Press **Grant access and test**.
 3. Back in the panel: pick a person, say what they're trying to do, press
-   **See what they think**.
+   **See what they think**. Four people ship with it; **Settings → The people**
+   is where you replace them with your own.
 
 Try it on the two fixtures first — they're served from the extension itself at
 `dist/fixtures/hostile.html` and `dist/fixtures/friendly.html`, or from any static
@@ -89,6 +90,27 @@ fixed element. Your app's markup is never given an attribute, a class, or an id 
 identity is held in a `WeakMap`. A tool that perturbs what it measures is worse than no
 tool.
 
+## The people
+
+Four personas ship in code — a retired teacher, a warehouse worker on a phone, a
+florist buying with her own money, an office manager who has been phished once.
+They span the axes that actually change a verdict rather than a demographic
+spread: vocabulary, how much friction the motivation absorbs, phone or desk, and
+what makes the tab close.
+
+They are a starting point and they are meant to be replaced. **Settings → The
+people** adds, edits, duplicates and deletes them. The fields are the ones the
+prompt uses, and the one that moves a run most is *words they do not know* —
+it's what turns your own copy into the thing that stops someone.
+
+Defaults stay in code; storage holds only the difference from them. An edit to a
+shipped person is stored under the same id and **Reset** removes it, so a
+default can always come back, and a later release that improves the shipped
+wording still reaches anyone who never touched it. Ids are permanent across a
+rename, so old sessions keep naming the right person and the analysis cache
+still lines up — editing a persona is a real change to the inputs, so the next
+run is a real run rather than a cached one.
+
 ## Development
 
 ```bash
@@ -109,6 +131,7 @@ script must each be one self-contained IIFE (`vite.script.config.ts`, run once p
 |---|---|
 | `src/content/capture.ts` | The page model, the felt signals, the redaction |
 | `src/content/pins.ts` | The shadow-root marker overlay |
+| `src/shared/personas/` | The four shipped people, and the store the dev's own live in |
 | `src/shared/prompt.ts` | Persona + page → the text a model answers |
 | `src/shared/schema.ts` | The JSON contract, and a parser that doesn't trust it |
 | `src/shared/grounding.ts` | Drops reactions about UI that wasn't there |
@@ -137,5 +160,9 @@ The signals alone already separate them cleanly:
 - **Journey recording** — walking a signup flow across several pages. The data model is
   already shaped for it (`Session.captures[]`, `Reaction.captureId`), so it needs a
   recorder and a sequence-aware prompt, not a rewrite.
-- **Persona editing and session history** — the four personas in
-  `src/shared/personas/defaults.ts` are currently code, not editable in the options page.
+- **Session history** — a run is shown and then lost. `Session` is already the
+  complete record of one; what is missing is somewhere to keep it and a list to
+  pick from.
+- **Sharing personas** — a team writes these once and would want them in the
+  repo. Export and import on top of `validatePersona` is the short version of
+  that; a personas file the extension reads is the longer one.

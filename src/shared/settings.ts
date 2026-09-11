@@ -3,6 +3,7 @@
 // Storage is `local`, never `sync`: this object can hold an API key, and a key
 // that syncs is a key that has left the machine.
 import { api } from './browser'
+import type { PersonaStore } from './personas'
 
 export interface BackendConfig {
   /** Base URL of an OpenAI-compatible server, or the Anthropic API root. */
@@ -23,8 +24,8 @@ export interface Settings {
   confirmedOrigins: string[]
   activeBackendId: string | null
   backends: Record<string, BackendConfig>
-  /** Custom and edited personas. Defaults live in code. */
-  personas: Record<string, unknown>
+  /** Custom and edited personas, by id. Defaults live in code; this holds deltas. */
+  personas: PersonaStore
   /** Show the dropped-reaction detail and the raw page model. */
   debug: boolean
 }

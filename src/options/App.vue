@@ -1,9 +1,23 @@
 <script setup lang="ts">
-// Two things live here, and both are gates rather than preferences: which
-// origins may ever be analysed, and where the analysis is sent.
+// Three things live here. Two are gates rather than preferences — which origins
+// may ever be analysed, and where the analysis is sent — and the third is the
+// cast: the people Fresh Eyes can look through the eyes of.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '@/shared/browser'
 import { BACKENDS, DEFAULT_BACKEND_ID, getBackend } from '@/shared/backends'
+import PersonaEditor from './PersonaEditor.vue'
+import {
+  blankPersona,
+  copyPersona,
+  duplicatePersona,
+  forgetPersona,
+  isEdited,
+  isShipped,
+  listPersonas,
+  savePersona,
+  type PersonaDraft,
+} from '@/shared/personas'
+import type { Persona } from '@/shared/types'
 import {
   DEFAULT_ALLOWLIST,
   getSettings,
@@ -181,6 +195,60 @@ async function testConnection() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+const people = computed(() => listPersonas(settings.value?.personas))
+const editing = ref<PersonaDraft | null>(null)
+const editingIsNew = ref(false)
+/** Second press confirms — a persona is a paragraph of writing to lose. */
+const pendingRemoval = ref<string | null>(null)
+
+function edited(id: string): boolean {
+  return isEdited(id, settings.value?.personas)
+}
+
+function startNew() {
+  editing.value = blankPersona()
+  editingIsNew.value = true
+  pendingRemoval.value = null
+}
+
+function startEdit(person: Persona) {
+  editing.value = copyPersona(person)
+  editingIsNew.value = false
+  pendingRemoval.value = null
+}
+
+function startCopy(person: Persona) {
+  editing.value = duplicatePersona(settings.value?.personas ?? {}, person)
+  editingIsNew.value = true
+  pendingRemoval.value = null
+}
+
+async function saveDraft(draft: PersonaDraft) {
+  if (!settings.value) return
+  await persist({ personas: savePersona(settings.value.personas, draft) })
+  editing.value = null
+}
+
+/**
+ * Deletes a custom person, and restores the shipped wording for an edited
+ * default — the same operation on the store either way, because the store only
+ * ever holds the difference from what is in code.
+ */
+async function forget(person: Persona) {
+  if (!settings.value) return
+  if (pendingRemoval.value !== person.id) {
+    pendingRemoval.value = person.id
+    return
+  }
+  pendingRemoval.value = null
+  await persist({ personas: forgetPersona(settings.value.personas, person.id) })
+  if (editing.value?.id === person.id) editing.value = null
+}
+
 function addPattern() {
   if (!settings.value) return
   patternError.value = ''
@@ -303,6 +371,56 @@ async function removePattern(pattern: string) {
         <span v-if="testState.detail" :class="testState.status === 'ok' ? 'ok' : 'warn'">
           {{ testState.detail }}
         </span>
+      </div>
+    </section>
+
+    <section class="card stack">
+      <h2>The people</h2>
+      <p class="dim">
+        Four come with Fresh Eyes as a starting point. They are worth replacing:
+        a persona that describes one of your own users — their words, their
+        reason for being here, what makes them leave — is the difference between
+        a plausible run and a useful one.
+      </p>
+
+      <ul class="people">
+        <li v-for="person in people" :key="person.id">
+          <div class="who">
+            <strong>{{ person.name }}</strong>
+            <span v-if="!isShipped(person.id)" class="tag">yours</span>
+            <span v-else-if="edited(person.id)" class="tag">edited</span>
+            <span class="dim traits">
+              tech {{ person.techLevel }}/5 · {{ person.patience }} patience ·
+              {{ person.device === 'mobile' ? 'phone' : 'desktop' }} ·
+              {{ person.unknownWords.length }} unknown words
+            </span>
+            <p class="dim context">{{ person.context }}</p>
+          </div>
+          <div class="actions">
+            <button @click="startEdit(person)">Edit</button>
+            <button @click="startCopy(person)">Duplicate</button>
+            <button
+              v-if="!isShipped(person.id) || edited(person.id)"
+              :class="{ danger: pendingRemoval === person.id }"
+              @click="forget(person)"
+            >
+              <template v-if="pendingRemoval === person.id">Sure?</template>
+              <template v-else-if="isShipped(person.id)">Reset</template>
+              <template v-else>Delete</template>
+            </button>
+          </div>
+        </li>
+      </ul>
+
+      <PersonaEditor
+        v-if="editing"
+        :draft="editing"
+        :is-new="editingIsNew"
+        @save="saveDraft"
+        @cancel="editing = null"
+      />
+      <div v-else class="row">
+        <button @click="startNew">Add a person</button>
       </div>
     </section>
 
@@ -445,6 +563,64 @@ header p {
 .patterns button {
   padding: 2px 8px;
   font-size: 11px;
+}
+
+.people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.people li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+}
+
+.who {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.traits {
+  display: block;
+  font-size: 11px;
+}
+
+.context {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}
+
+.actions button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.actions button.danger {
+  border-color: var(--sev-5);
+  color: var(--sev-5);
 }
 
 .ok {
