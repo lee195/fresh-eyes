@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // Two things live here, and both are gates rather than preferences: which
 // origins may ever be analysed, and where the analysis is sent.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '@/shared/browser'
 import { BACKENDS, DEFAULT_BACKEND_ID, getBackend } from '@/shared/backends'
 import {
   DEFAULT_ALLOWLIST,
   getSettings,
   maskKey,
+  matchPatternFor,
+  normalizePattern,
   saveSettings,
   type BackendConfig,
   type Settings,
@@ -15,6 +17,8 @@ import {
 
 const settings = ref<Settings | null>(null)
 const newPattern = ref('')
+const patternError = ref('')
+const granted = ref<string[]>([])
 const saved = ref(false)
 
 /** Held separately so a stored key is never rendered into an input. */
@@ -36,7 +40,55 @@ const storedKeyMask = computed(() => maskKey(config.value?.apiKey ?? ''))
 onMounted(async () => {
   settings.value = await getSettings()
   if (!settings.value.activeBackendId) await selectBackend(DEFAULT_BACKEND_ID)
+  await syncGranted()
+  api.permissions.onAdded.addListener(syncGranted)
+  api.permissions.onRemoved.addListener(syncGranted)
 })
+
+onUnmounted(() => {
+  api.permissions.onAdded.removeListener(syncGranted)
+  api.permissions.onRemoved.removeListener(syncGranted)
+})
+
+/** Which allowlisted origins we hold a lasting permission for. */
+async function syncGranted() {
+  const held = await api.permissions.getAll()
+  granted.value = held.origins ?? []
+}
+
+function isGranted(pattern: string): boolean {
+  const match = matchPatternFor(pattern)
+  return match ? granted.value.includes(match) : false
+}
+
+/**
+ * Asks for lasting access to one allowlisted origin.
+ *
+ * Without it Fresh Eyes can only read a tab while `activeTab` lasts, which ends
+ * at the next navigation — so the panel loses the address every time you reload
+ * the app you are working on. Granting is per-origin and always optional.
+ */
+async function grantPattern(pattern: string) {
+  const match = matchPatternFor(pattern)
+  if (!match) return
+  try {
+    await api.permissions.request({ origins: [match] })
+  } catch {
+    patternError.value = `Could not ask for access to ${pattern}.`
+  }
+  await syncGranted()
+}
+
+async function revokePattern(pattern: string) {
+  const match = matchPatternFor(pattern)
+  if (!match) return
+  try {
+    await api.permissions.remove({ origins: [match] })
+  } catch {
+    /* Chrome refuses to drop a permission it did not grant; nothing to report. */
+  }
+  await syncGranted()
+}
 
 watch(activeId, () => {
   keyDraft.value = ''
@@ -130,15 +182,36 @@ async function testConnection() {
 }
 
 function addPattern() {
-  const value = newPattern.value.trim()
-  if (!value || !settings.value || settings.value.allowlist.includes(value)) return
+  if (!settings.value) return
+  patternError.value = ''
+
+  const raw = newPattern.value.trim()
+  if (!raw) return
+
+  // Stored in canonical form, so a pattern that cannot ever match is rejected
+  // here — where the reason can be shown — rather than silently at match time.
+  const value = normalizePattern(raw)
+  if (!value) {
+    patternError.value = `${raw} isn't a host this can match. Try something like https://staging.internal.`
+    return
+  }
+  if (settings.value.allowlist.includes(value)) {
+    patternError.value = `${value} is already on the list.`
+    newPattern.value = ''
+    return
+  }
+
   persist({ allowlist: [...settings.value.allowlist, value] })
   newPattern.value = ''
+
+  // Still inside the click, which is the only place Chrome will show the prompt.
+  grantPattern(value)
 }
 
-function removePattern(pattern: string) {
+async function removePattern(pattern: string) {
   if (!settings.value) return
-  persist({ allowlist: settings.value.allowlist.filter((p) => p !== pattern) })
+  await persist({ allowlist: settings.value.allowlist.filter((p) => p !== pattern) })
+  await revokePattern(pattern)
 }
 </script>
 
@@ -236,27 +309,39 @@ function removePattern(pattern: string) {
     <section class="card stack">
       <h2>Origins that may be analysed</h2>
       <p class="dim">
-        Ports are ignored. A leading <code>*.</code> matches subdomains only —
-        <code>http://*.localhost</code> covers <code>http://app.localhost</code>
-        and never <code>http://localhost.example.com</code>.
+        Ports and paths are ignored, so you can paste a URL straight from the address
+        bar. Without a scheme an entry is stored as <code>https://</code> — add
+        <code>http://</code> explicitly for a plain-HTTP dev server. A leading
+        <code>*.</code> matches subdomains only: <code>http://*.localhost</code> covers
+        <code>http://app.localhost</code>, but neither <code>http://localhost</code>
+        itself nor <code>http://localhost.example.com</code>.
       </p>
 
       <ul class="patterns">
         <li v-for="pattern in settings.allowlist" :key="pattern">
           <code>{{ pattern }}</code>
+          <span v-if="isGranted(pattern)" class="ok">access kept</span>
+          <button v-else class="linkish" @click="grantPattern(pattern)">Keep access</button>
           <button @click="removePattern(pattern)">Remove</button>
         </li>
       </ul>
+      <p class="dim hint">
+        Being on this list is permission to analyse an origin; <em>keeping access</em> is a
+        separate, optional grant that lets Fresh Eyes read the tab after it navigates.
+        Without it the panel forgets the address every time you reload your app, and you
+        press the toolbar button again to bring it back.
+      </p>
 
       <div class="row">
         <input
           v-model="newPattern"
-          type="url"
-          placeholder="http://staging.internal"
+          type="text"
+          placeholder="staging.internal"
           @keyup.enter="addPattern"
         />
         <button @click="addPattern">Add</button>
       </div>
+      <p v-if="patternError" class="warn">{{ patternError }}</p>
 
       <div class="row">
         <button @click="persist({ allowlist: [...DEFAULT_ALLOWLIST] })">

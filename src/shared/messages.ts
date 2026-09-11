@@ -12,20 +12,32 @@ import { api } from './browser'
 // ---------------------------------------------------------------------------
 
 export type PanelRequest =
-  /** Which tab are we looking at, is its origin allowed, is a backend configured. */
-  | { type: 'GET_CONTEXT' }
+  /**
+   * Which tab are we looking at, is its origin allowed, is a backend configured.
+   *
+   * `lastKnown` is the origin the panel read while `activeTab` was still granted,
+   * tagged with the tab it came from so it is never attributed to another one.
+   * Display only — the gate in run.ts re-derives the origin from the tab itself
+   * and never trusts this.
+   */
+  | { type: 'GET_CONTEXT'; lastKnown?: { tabId: number; origin: string } }
   | { type: 'RUN'; personaId: string; goal: string }
   | { type: 'CANCEL' }
   /** Panel row hovered/selected — tell the content script to emphasise its pin. */
   | { type: 'FOCUS_ANCHOR'; anchorId: string | null }
   | { type: 'CLEAR_PINS' }
   /** Grant the model endpoint's origin, or the page origin, on demand. */
-  | { type: 'REQUEST_HOST_PERMISSION'; origin: string }
 
 export interface PanelContext {
   tabId: number | null
   url: string | null
   origin: string | null
+  /**
+   * Whether a host permission is held for this origin. Without one the tab's
+   * address is readable only while `activeTab` lasts, which ends at the next
+   * navigation — so this is what decides whether to offer the upgrade.
+   */
+  hostPermission: boolean
   /** False when the origin is outside the allowlist and needs confirmation. */
   originAllowed: boolean
   /** Null when no backend has been configured yet. */
@@ -37,7 +49,6 @@ export type PanelResponse =
   | { type: 'CONTEXT'; context: PanelContext }
   | { type: 'CAPTURE'; capture: Capture }
   | { type: 'SESSION'; session: Session }
-  | { type: 'PERMISSION'; granted: boolean }
   | { type: 'OK' }
   | { type: 'ERROR'; message: string }
 

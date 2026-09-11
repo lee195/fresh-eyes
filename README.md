@@ -62,6 +62,12 @@ origin by name.
 Analysis is limited to an **origin allowlist**, which starts as localhost and nothing
 else. The panel always shows the destination host next to the run button.
 
+Being on the allowlist is permission to *analyse* an origin. Reading the tab is separate:
+`activeTab` lasts until the tab navigates, so after you reload your app the panel no longer
+knows its address until you press the toolbar button again. If that gets tiresome, **Keep
+access** in Settings asks for a lasting host permission for that one origin — optional, per
+origin, and revoked again when you remove the entry from the list.
+
 API keys live in `chrome.storage.local` — never `sync`, never rendered back to the UI,
 never included in an export. A local Ollama endpoint needs no key at all.
 

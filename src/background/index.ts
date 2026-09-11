@@ -6,7 +6,7 @@
 import { api, hasSidePanel } from '@/shared/browser'
 import type { PanelContext, PanelRequest, PanelResponse } from '@/shared/messages'
 import { emit, errorText, sendToTab } from '@/shared/messages'
-import { endpointHost, getSettings, isOriginAllowed } from '@/shared/settings'
+import { endpointHost, getSettings, isOriginAllowed, matchPatternFor } from '@/shared/settings'
 import { cancelRun, runAnalysis } from './run'
 import { getBackend } from '@/shared/backends'
 
@@ -70,10 +70,28 @@ function originOf(url: string | undefined): string | null {
 // Panel requests
 // ---------------------------------------------------------------------------
 
-async function buildContext(): Promise<PanelContext> {
+/** Do we hold a lasting permission for this origin, beyond the activeTab grant? */
+async function hasHostPermission(origin: string): Promise<boolean> {
+  const match = matchPatternFor(origin)
+  if (!match) return false
+  try {
+    return await api.permissions.contains({ origins: [match] })
+  } catch {
+    return false
+  }
+}
+
+async function buildContext(lastKnown?: { tabId: number; origin: string }): Promise<PanelContext> {
   const tab = await activeTab()
   const settings = await getSettings()
-  const origin = originOf(tab?.url)
+
+  // Without the `tabs` permission a tab's URL is readable only while activeTab
+  // is granted, and that ends at the next navigation. Falling back to what the
+  // panel last read keeps the address on screen, but only for the same tab —
+  // and it is still re-checked against the allowlist below, never trusted as
+  // allowed. The run gate re-derives the origin from the tab regardless.
+  const remembered = lastKnown && tab?.id === lastKnown.tabId ? lastKnown.origin : null
+  const origin = originOf(tab?.url) ?? remembered
 
   const backendId = settings.activeBackendId
   const config = backendId ? settings.backends[backendId] : undefined
@@ -83,6 +101,7 @@ async function buildContext(): Promise<PanelContext> {
     url: tab?.url ?? null,
     origin,
     originAllowed: origin ? isOriginAllowed(origin, settings) : false,
+    hostPermission: origin ? await hasHostPermission(origin) : false,
     backend:
       backendId && config
         ? {
@@ -99,12 +118,7 @@ async function buildContext(): Promise<PanelContext> {
 async function handle(req: PanelRequest): Promise<PanelResponse> {
   switch (req.type) {
     case 'GET_CONTEXT':
-      return { type: 'CONTEXT', context: await buildContext() }
-
-    case 'REQUEST_HOST_PERMISSION': {
-      const granted = await api.permissions.request({ origins: [`${req.origin}/*`] })
-      return { type: 'PERMISSION', granted }
-    }
+      return { type: 'CONTEXT', context: await buildContext(req.lastKnown) }
 
     case 'FOCUS_ANCHOR': {
       const tab = await activeTab()
@@ -161,7 +175,6 @@ const PANEL_REQUESTS = new Set<PanelRequest['type']>([
   'CANCEL',
   'FOCUS_ANCHOR',
   'CLEAR_PINS',
-  'REQUEST_HOST_PERMISSION',
 ])
 
 function isPanelRequest(msg: { type: string }): msg is PanelRequest {
