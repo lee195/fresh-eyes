@@ -5,9 +5,9 @@ import { emit, errorText, sendToTab, type ContentResponse } from '@/shared/messa
 import { getBackend } from '@/shared/backends'
 import { BackendError } from '@/shared/backends/types'
 import { groundAnalysis } from '@/shared/grounding'
-import { DEFAULT_PERSONAS } from '@/shared/personas/defaults'
+import { resolvePersona } from '@/shared/personas'
 import { endpointHost, getSettings, isOriginAllowed } from '@/shared/settings'
-import type { Capture, Persona, Session } from '@/shared/types'
+import type { Capture, Session } from '@/shared/types'
 import { captureViewport } from './screenshot'
 import { analysisKey, readCache, writeCache } from './cache'
 
@@ -40,7 +40,9 @@ export async function runAnalysis(
   await assertCanReachEndpoint(config.baseUrl)
 
   const persona = resolvePersona(personaId, settings.personas)
-  if (!persona) throw new Error(`Unknown persona "${personaId}".`)
+  if (!persona) {
+    throw new Error('That person no longer exists. Pick someone else, or add them in Settings.')
+  }
 
   const session: Session = {
     id: `run-${Date.now().toString(36)}`,
@@ -120,12 +122,6 @@ async function captureTab(tab: chrome.tabs.Tab, wantScreenshot: boolean): Promis
 
   const screenshot = wantScreenshot && tab.windowId ? await captureViewport(tab.windowId) : null
   return { ...res.capture, screenshot: screenshot ?? undefined }
-}
-
-function resolvePersona(id: string, overrides: Record<string, unknown>): Persona | undefined {
-  const custom = overrides[id] as Persona | undefined
-  if (custom) return custom
-  return DEFAULT_PERSONAS.find((p) => p.id === id)
 }
 
 /**

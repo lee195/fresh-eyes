@@ -2,9 +2,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/shared/browser'
 import { sendToBackground, type BackgroundEvent, type PanelContext } from '@/shared/messages'
-import { matchPatternFor, SETTINGS_KEY } from '@/shared/settings'
-import { DEFAULT_PERSONAS } from '@/shared/personas/defaults'
-import { TERMINAL_ACTIONS, type Reaction, type Session } from '@/shared/types'
+import { getSettings, matchPatternFor, SETTINGS_KEY } from '@/shared/settings'
+import { listPersonas } from '@/shared/personas'
+import { TERMINAL_ACTIONS, type Persona, type Reaction, type Session } from '@/shared/types'
 import {
   ACTION_ICONS,
   ACTION_LABELS,
@@ -15,7 +15,8 @@ import {
 
 const context = ref<PanelContext | null>(null)
 const session = ref<Session | null>(null)
-const personaId = ref(DEFAULT_PERSONAS[0]!.id)
+const people = ref<Persona[]>(listPersonas({}))
+const personaId = ref(people.value[0]!.id)
 const goal = ref('Sign up for an account')
 const busy = ref(false)
 const stage = ref<string | null>(null)
@@ -24,7 +25,7 @@ const selected = ref<string | null>(null)
 const causeFilter = ref<string | null>(null)
 const showDiscarded = ref(false)
 
-const persona = computed(() => DEFAULT_PERSONAS.find((p) => p.id === personaId.value))
+const persona = computed(() => people.value.find((p) => p.id === personaId.value))
 const analysis = computed(() => session.value?.analysis ?? null)
 
 /** The seq after which nothing was ever seen. */
@@ -65,6 +66,20 @@ async function refresh() {
 
   const res = await sendToBackground({ type: 'GET_CONTEXT', lastKnown })
   if (res.type === 'CONTEXT') context.value = res.context
+}
+
+/**
+ * Re-read the cast. Called on open and again whenever the options page writes,
+ * so a person added in the tab next door can be picked here without a reload.
+ */
+async function refreshPeople() {
+  const settings = await getSettings()
+  people.value = listPersonas(settings.personas)
+  // The selected person may have just been deleted, or renamed away from the
+  // default; fall back rather than run against someone who no longer exists.
+  if (!people.value.some((p) => p.id === personaId.value)) {
+    personaId.value = people.value[0]!.id
+  }
 }
 
 async function run() {
@@ -152,14 +167,18 @@ function onBackgroundEvent(message: unknown) {
  * The side panel document stays mounted across tab switches and while the
  * options page sits in another tab, so without these listeners `context` keeps
  * whatever it was built with when the panel first opened — which is how an
- * origin added to the allowlist still reads as "not on the allowed list".
+ * origin added to the allowlist still reads as "not on the allowed list", and
+ * how a person added in Settings would stay missing from the list above.
  */
 function onStorageChanged(changes: Record<string, chrome.storage.StorageChange>, area: string) {
-  if (area === 'local' && changes[SETTINGS_KEY]) refresh()
+  if (area !== 'local' || !changes[SETTINGS_KEY]) return
+  refresh()
+  refreshPeople()
 }
 
 onMounted(() => {
   refresh()
+  refreshPeople()
   api.runtime.onMessage.addListener(onBackgroundEvent)
   api.storage.onChanged.addListener(onStorageChanged)
   api.tabs.onActivated.addListener(refresh)
@@ -185,10 +204,13 @@ onUnmounted(() => {
       <label class="field">
         <span>Who</span>
         <select v-model="personaId">
-          <option v-for="p in DEFAULT_PERSONAS" :key="p.id" :value="p.id">{{ p.name }}</option>
+          <option v-for="p in people" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </label>
-      <p v-if="persona" class="dim persona">{{ persona.context }}</p>
+      <p v-if="persona" class="dim persona">
+        {{ persona.context }}
+        <button class="linkish" @click="openOptions">Edit people</button>
+      </p>
 
       <label class="field">
         <span>Trying to</span>
