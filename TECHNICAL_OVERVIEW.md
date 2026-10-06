@@ -31,24 +31,24 @@ Fresh Eyes is built as a multi-context WebExtension targeting Chrome (MV3 with S
 
 ```mermaid
 flowchart TB
-    subgraph BrowserContext ["Browser / Host Page (Active Tab)"]
+    subgraph BrowserContext ["Browser / Host Page - Active Tab"]
         HostDOM["Host Application DOM"]
-        ContentScript["Content Script (IIFE)\nsrc/content/index.ts"]
-        CaptureEngine["Capture Engine\nsrc/content/capture.ts"]
-        PinOverlay["Pin Overlay (Closed Shadow DOM)\nsrc/content/pins.ts"]
+        ContentScript["Content Script - IIFE<br/>src/content/index.ts"]
+        CaptureEngine["Capture Engine<br/>src/content/capture.ts"]
+        PinOverlay["Pin Overlay - Closed Shadow DOM<br/>src/content/pins.ts"]
         
-        HostDOM -.->|Traverse & Filter| CaptureEngine
+        HostDOM -.->|Traverse and Filter| CaptureEngine
         ContentScript --> CaptureEngine
         ContentScript --> PinOverlay
-        PinOverlay -.->|Float Over (Zero Mutation)| HostDOM
+        PinOverlay -.->|Float Over - Zero Mutation| HostDOM
     end
 
-    subgraph ExtensionWorker ["Extension Background Worker (IIFE)"]
-        SW["Service Worker\nsrc/background/index.ts"]
-        RunOrchestrator["Run Orchestrator\nsrc/background/run.ts"]
-        GroundingEngine["Grounding Validator\nsrc/shared/grounding.ts"]
-        CacheManager["Deterministic Cache (SHA-256)\nsrc/background/cache.ts"]
-        ScreenshotModule["Viewport Capture\nsrc/background/screenshot.ts"]
+    subgraph ExtensionWorker ["Extension Background Worker - IIFE"]
+        SW["Service Worker<br/>src/background/index.ts"]
+        RunOrchestrator["Run Orchestrator<br/>src/background/run.ts"]
+        GroundingEngine["Grounding Validator<br/>src/shared/grounding.ts"]
+        CacheManager["Deterministic Cache SHA-256<br/>src/background/cache.ts"]
+        ScreenshotModule["Viewport Capture<br/>src/background/screenshot.ts"]
         
         SW --> RunOrchestrator
         RunOrchestrator --> GroundingEngine
@@ -56,22 +56,24 @@ flowchart TB
         RunOrchestrator --> ScreenshotModule
     end
 
-    subgraph UserInterface ["Extension UI (Vue 3 / Vite ESM)"]
-        SidePanel["Side Panel View\nsrc/sidepanel/App.vue"]
-        OptionsPage["Options & Persona Editor\nsrc/options/App.vue"]
+    subgraph UserInterface ["Extension UI - Vue 3 / Vite ESM"]
+        SidePanel["Side Panel View<br/>src/sidepanel/App.vue"]
+        OptionsPage["Options and Persona Editor<br/>src/options/App.vue"]
     end
 
     subgraph ExternalServices ["Configured AI Endpoint"]
-        AnthropicAPI["Anthropic Messages API\n(Direct Tool-Use Calling)"]
-        OpenAICompat["OpenAI-Compatible Endpoint\n(Ollama, vLLM, Hosted Gateway)"]
+        AnthropicAPI["Anthropic Messages API<br/>Direct Tool-Use Calling"]
+        OpenAICompat["OpenAI-Compatible Endpoint<br/>Ollama / vLLM / Hosted Gateway"]
     end
 
     %% Communication Channels
-    SidePanel <-->|PanelRequest / PanelResponse\nchrome.runtime.sendMessage| SW
-    OptionsPage <-->|chrome.storage.local| SW
-    SW <-->|ContentRequest / ContentResponse\nchrome.tabs.sendMessage| ContentScript
-    RunOrchestrator -->|Direct fetch() from SW| AnthropicAPI
-    RunOrchestrator -->|Direct fetch() from SW| OpenAICompat
+    SidePanel -->|chrome.runtime.sendMessage| SW
+    SW -->|PanelResponse / Events| SidePanel
+    OptionsPage -->|chrome.storage.local| SW
+    SW -->|chrome.tabs.sendMessage| ContentScript
+    ContentScript -->|ContentResponse| SW
+    RunOrchestrator -->|Direct fetch from SW| AnthropicAPI
+    RunOrchestrator -->|Direct fetch from SW| OpenAICompat
 ```
 
 ### Component Context Separation
@@ -223,12 +225,12 @@ All network calls are executed exclusively within the background service worker.
 classDiagram
     class ModelBackend {
         <<interface>>
-        +id: string
-        +label: string
-        +defaults: BackendConfig
-        +hint: string
-        +analyze(req, options): Promise~AnalysisResult~
-        +estimate(req, config): Estimate
+        +string id
+        +string label
+        +BackendConfig defaults
+        +string hint
+        +analyze(req, options)
+        +estimate(req, config)
     }
     class AnthropicBackend {
         +analyze(req, options)
@@ -309,46 +311,46 @@ $$\text{CacheKey} = \text{SHA-256}\Big(\big[\text{nodes}, \text{personaId}, \tex
 sequenceDiagram
     autonumber
     actor Dev as Developer
-    participant Panel as Side Panel (Vue)
+    participant Panel as Side Panel - Vue
     participant SW as Service Worker
-    participant Tab as Active Tab (Content Script)
+    participant Tab as Active Tab - Content Script
     participant LLM as Model Backend
 
     Dev->>Panel: Click "See what they think"
-    Panel->>SW: sendToBackground({ type: 'RUN', personaId, goal })
+    Panel->>SW: sendToBackground RUN - personaId, goal
     SW->>SW: Check origin against allowlist
     SW->>SW: Verify endpoint permission
-    SW->>Tab: sendToTab({ type: 'PING' })
+    SW->>Tab: sendToTab PING
     alt Content script not attached
-        SW->>Tab: chrome.scripting.executeScript('content.js')
+        SW->>Tab: Inject content.js via scripting API
     end
-    SW->>Tab: sendToTab({ type: 'CAPTURE' })
-    Tab->>Tab: buildCapture() (walk DOM, felt signals, redact)
+    SW->>Tab: sendToTab CAPTURE
+    Tab->>Tab: buildCapture - walk DOM, felt signals, redact
     Tab-->>SW: Return Capture data
     
     opt Backend vision enabled
-        SW->>SW: captureViewport(windowId) via chrome.tabs.captureVisibleTab
+        SW->>SW: captureViewport via captureVisibleTab
     end
     
-    SW->>SW: Compute analysisKey hash
+    SW->>SW: Compute analysisKey SHA-256 hash
     alt Cache hit
         SW-->>Panel: Return cached GroundedAnalysis
     else Cache miss
-        SW->>LLM: fetch(endpoint) with structured prompt & schema
+        SW->>LLM: POST endpoint with structured prompt and schema
         LLM-->>SW: Raw JSON response
-        SW->>SW: parseAnalysis() (strip markdown fences, validate enums)
-        SW->>SW: groundAnalysis() (filter hallucinations via trigrams)
-        SW->>SW: writeCache(hash, grounded)
-        SW->>Panel: emit({ type: 'SESSION_UPDATE', session })
-        SW->>Tab: sendToTab({ type: 'SHOW_PINS', pins })
-        Tab->>Tab: Render closed Shadow DOM pins & halos
+        SW->>SW: parseAnalysis - strip fences, validate enums
+        SW->>SW: groundAnalysis - filter hallucinations via trigrams
+        SW->>SW: writeCache hash, grounded
+        SW->>Panel: emit SESSION_UPDATE event
+        SW->>Tab: sendToTab SHOW_PINS
+        Tab->>Tab: Render closed Shadow DOM pins and halos
         SW-->>Panel: Return completed Session
     end
 
     Dev->>Panel: Hover / Click reaction row
-    Panel->>SW: sendToBackground({ type: 'FOCUS_ANCHOR', anchorId })
-    SW->>Tab: sendToTab({ type: 'FOCUS_PIN', anchorId })
-    Tab->>Tab: Smooth scroll element into view & expand halo
+    Panel->>SW: sendToBackground FOCUS_ANCHOR
+    SW->>Tab: sendToTab FOCUS_PIN
+    Tab->>Tab: Smooth scroll element into view and expand halo
 ```
 
 ---
