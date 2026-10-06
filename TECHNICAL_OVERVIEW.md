@@ -120,7 +120,9 @@ Candidate Nodes Capped at NODE_BUDGET (400) -> Yields ~1k–3k Tokens
 
 #### Node Reduction & Prioritization
 - **Target Node Budget (`NODE_BUDGET = 400`)**: If candidates exceed 400 nodes, elements are ranked by perceptual importance:
-  $$\text{Priority} = (\text{interactive} \times 4) + (\text{heading} \times 3) + (\text{above\_fold} \times 2) + (\text{image} \times 1)$$
+  ```text
+  Priority = (interactive × 4) + (heading × 3) + (above_fold × 2) + (image × 1)
+  ```
   Nodes surviving the budget are restored to natural document reading order to preserve narrative flow.
 - **Accessible Name Resolution**: Follows ARIA labels, `aria-labelledby`, `<label for="...">`, wrapping `<label>`, or image `alt`, omitting placeholder fallbacks (which disappear on typing).
 - **Dead Click Detection (`looksClickable`)**: Identifies elements with `cursor: pointer` that lack interactive semantics (`role`, `tabindex >= 0`, `<a>` with `href`, `<button>`). These represent deceptive dead click traps.
@@ -289,8 +291,10 @@ GroundedAnalysis (with Discarded Reasons list)
 ```
 
 **Trigram Containment Algorithm**:
-$$\text{Containment}(A, B) = \frac{|\text{Trigrams}(A) \cap \text{Trigrams}(B)|}{|\text{Trigrams}(A)|}$$
-Where $A$ is the normalized quoted evidence and $B$ is a corpus block from the page model. This allows minor whitespace variations or dropped trailing punctuation without permitting fabricated UI elements.
+```text
+Containment(A, B) = |Trigrams(A) ∩ Trigrams(B)| / |Trigrams(A)|
+```
+Where `A` is the normalized quoted evidence and `B` is a corpus block from the page model. This allows minor whitespace variations or dropped trailing punctuation without permitting fabricated UI elements.
 
 ---
 
@@ -298,7 +302,9 @@ Where $A$ is the normalized quoted evidence and $B$ is a corpus block from the p
 
 To avoid repeated token consumption and model non-determinism during UI development, analyses are cached using a 16-byte SHA-256 digest:
 
-$$\text{CacheKey} = \text{SHA-256}\Big(\big[\text{nodes}, \text{personaId}, \text{persona}, \text{goal}, \text{backendId}, \text{model}, \text{hasScreenshot}\big]\Big)$$
+```text
+CacheKey = SHA-256([nodes, personaId, persona, goal, backendId, model, hasScreenshot])
+```
 
 - Ephemeral variables (timestamps, scroll offsets) are excluded from the hash.
 - Up to 20 LRU entries are retained in `chrome.storage.local`.
